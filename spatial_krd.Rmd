@@ -24,6 +24,12 @@ output: html_document
 
 ```
 
+create a new chunk to push.
+```{r}
+foo <- 1 + 1
+rm(foo)
+
+```
 
 
 ```{r}
