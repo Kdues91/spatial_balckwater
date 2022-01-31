@@ -1,0 +1,287 @@
+---
+title: "spatial_krd"
+output: html_document
+---
+
+```{r}
+#Load Libraries 
+library(rgdal)
+library(readr)
+library(maptools)
+library(raster)
+library(sp)
+library(tidyverse)
+library(progress)
+library(lme4)
+library(car)
+
+library(deldir)
+library(goftest)
+library(spatstat)
+
+#set working Directories 
+#setwd("C:/Users/kdues/Desktop/To_Willis-20220113T140426Z-001/To_Willis-20220113T140426Z-001/To_Willis/Schnake_Data_Analysis")
+
+```
+
+
+
+```{r}
+# Load Shapefiles 
+# (KD) slight edit from original 
+subplots <- readOGR(dsn = ".", "adj_plots") 
+crs(subplots)
+plot(subplots)
+
+stems <- readOGR(dsn = ".", "adj_stems")
+crs(stems)
+View(stems)
+plot(stems)
+
+```
+
+```{r}
+# Add x and y coordinates for the stems 
+
+stems$X <-  coordinates(stems)[,1]
+stems$Y <-  coordinates(stems)[,2]
+```
+
+```{r}
+# Data Cleaning
+
+brsfstems_new <- remove.duplicates(stems)
+brsfstems_new <- tbl_df(brsfstems_new)
+brsfstems_new
+
+# sorts the gaps by name#
+sort(unique(subplots$gap_id_new)) 
+#creates an object containing the sorted gap names
+Gap_Names <- sort(unique(subplots$gap_id_new)) 
+
+View(Gap_Names)
+```
+
+```{r}
+# Create a list of point patterns by subplot 
+# (KD) had a major error here getting the spatstat pkg to work 
+
+brsf_ppps <- vector('list')
+for (Gaps in Gap_Names) {
+  print(Gaps)
+  
+  SubsetGaps <- subset(subplots, gap_id_new ==Gaps)
+  Gapsubsetwindow <- as.owin(SubsetGaps)
+  Subsetstems <- subset(brsfstems_new, gap_id_new==Gaps)
+  x <- Subsetstems$X # identifies the x coordinate
+  y <- Subsetstems$Y# identifies the y coordinate
+  spcode <- factor(Subsetstems$layer) # sets species as a factor for use as a mark
+  brsf_stems <- ppp(x, y, window = Gapsubsetwindow, marks = spcode, unitname=c("metre","metres"))
+  brsf_ppps[[Gaps]]<- brsf_stems
+}
+
+is.multitype(brsf_ppps)
+```
+
+```{r}
+#Convert to a solist so we can run functions on the list if needed. 
+brsf_stems_pointpatterns <- as.solist(brsf_ppps)
+
+View(brsf_stems_pointpatterns$P22)
+#dev.off()
+plot(brsf_stems_pointpatterns$P3)
+
+
+brsf_hyperframe <- hyperframe(Plots = Gap_Names, Points = brsf_stems_pointpatterns)
+
+
+brsf_hyperframe
+```
+
+```{r}
+# Split the point patterns to allow the creation of null models. 
+
+splithyp <- with(brsf_hyperframe, split(Points))
+
+plot(splithyp)
+
+L_all <- with(brsf_hyperframe, alltypes(Points, Lcross))
+
+plot(L_all$`5`)
+```
+
+```{r}
+# check for to see if the points are 
+
+Q_test <- with(brsf_hyperframe, quadrat.test(Points, nx=2,ny=4))
+Q_test
+
+# The results of this test show that these points are inhomogeneous. 
+
+```
+
+```{r}
+# L Cross 
+
+
+LCross_BRSF <- with(brsf_hyperframe, Lcross(Points, "regen", "trees", correction="isotropic", ratio=TRUE))
+
+plot(LCross_BRSF$`2`)
+
+LCross_BRSF_Env <- with(brsf_hyperframe, envelope(Points, Lcross, nsim = 39, i = "trees", j = "regen", savefuns = TRUE))
+
+plot(LCross_BRSF_Env$`1`, .-r~r)
+
+
+
+Pooled_LCross <- pool(LCross_BRSF)
+Pooled_LCross_Env <- pool(LCross_BRSF_Env)
+
+plot(Pooled_LCross_Env, .-r~r)
+
+
+LCross_BRSF_Test <- with(brsf_hyperframe, envelope(Points, Lcross, nsim = 39, i = "trees", j = "regen", simulate = expression(rshift(Points, radius = 1.5, which = "regen")), savefuns = TRUE))
+
+plot(LCross_BRSF_Test$`6`)
+
+#errors in the next two lines of code 
+
+Pooled_Test <- pool(LCross_BRSF_Test)
+
+plot(Pooled_Test, .-r~r)
+
+
+fit <- with(brsf_hyperframe, ppm(Points ~ polynom(x,y,3)))
+
+fit
+
+
+brsf_hyperframe$Points$`1`
+```
+
+```{r}
+# Exploratory Analysis 
+
+# Begin with a simple test of independence. 
+
+# does not work
+stem_env <- envelope(brsf_hyperframe, Lcross, nsim=39, i="regen", j ="trees", simulate=expression(rshift(brsf_hyperframe, radius = 50)))
+
+
+
+
+library(readxl)
+regen_analysis <- read_excel("regen_analysis.xlsx", 
+                             col_types = c("text", "text", "numeric"))
+View(regen_analysis)
+
+hist(regen_analysis$regen_tph)
+
+tph.by.trtmnt <- lme(regen_tph ~ trtmnt, data = regen_analysis)
+
+tph.by.trtmnt
+
+Anova(tph.by.trtmnt)
+
+plot(tph.by.trtmnt)
+
+
+boxplot(regen_tph~trtmnt,data=regen_analysis, main="TPH of Regen by Treatment",
+        xlab="Treatment", ylab="Seedlings per Hectare")
+
+```
+
+Below is the work I began after meeting on 1/21/2022
+attempting to use simulation envelopes....correlation function analysis to see if 
+there is spatial dependence 
+
+```{r}
+# 1/21/2022 attempts to get crossk crossl and cross paries 
+
+LCross_BRSF <- with(brsf_hyperframe, Lcross(Points, "regen", "trees", correction="isotropic", ratio=TRUE))
+
+plot(LCross_BRSF$`2`)
+
+LCross_BRSF_Env <- with(brsf_hyperframe, envelope(Points, Lcross, nsim = 39, i = "trees", j = "regen", savefuns = TRUE))
+
+plot(LCross_BRSF_Env$`1`, .-r~r)
+
+
+
+Pooled_LCross <- pool(LCross_BRSF)
+Pooled_LCross_Env <- pool(LCross_BRSF_Env)
+
+plot(Pooled_LCross_Env, .-r~r)
+
+
+LCross_BRSF_Test <-
+  with(
+    brsf_hyperframe,
+    envelope(
+      Points,
+      Lcross,
+      nsim = 39,
+      i = "trees",
+      j = "regen",
+      simulate = expression(rshift(
+        Points, radius = 1.5, which = "regen"
+      )),
+      savefuns = TRUE
+    )
+  )
+
+plot(LCross_BRSF_Test$`6`)
+
+
+
+
+
+
+```
+
+```{r}
+# (KD) attempt 1 
+
+#Kcross(X, i, j, r=NULL, breaks=NULL, correction,
+#       ..., ratio=FALSE, from, to )
+
+kcross_test <- Kcross(brsf_hyperframe, nsim = 30, i = "trees", j = "regen", r=NULL, breaks=NULL, correction,
+         ratio=FALSE, from, to )
+
+LCross_BRSF_Test <-
+  with(
+    brsf_hyperframe,
+    envelope(
+      Points,
+      Kcross,
+      nsim = 39,
+      i = "trees",
+      j = "regen",
+      simulate = expression(rshift(
+        Points, radius = 1.5, which = "regen"
+      )),
+      savefuns = TRUE
+    )
+  )
+
+plot(LCross_BRSF_Test$`6`)
+
+```
+```{r}
+# simulation envelope of summery function 
+#not entirely sure what this does 
+brsf_hyperframe$Points %>% 
+    purrr::map(envelope)
+```
+
+
+```{r}
+# ANOVA Tests 
+
+```
+
+
+
+
+
+
