@@ -5,19 +5,19 @@ output: html_document
 
 ```{r}
 #Load Libraries 
-library(rgdal)
-library(readr)
-library(maptools)
-library(raster)
-library(sp)
-library(tidyverse)
-library(progress)
-library(lme4)
-library(car)
-
-library(deldir)
-library(goftest)
-library(spatstat)
+#library(rgdal)
+#library(readr)
+#library(maptools)
+#library(raster)
+#library(sp)
+#library(tidyverse)
+#library(progress)
+#library(lme4)
+#library(car)
+#
+#library(deldir)
+#library(goftest)
+#library(spatstat)
 
 #set working Directories 
 #setwd("C:/Users/kdues/Desktop/To_Willis-20220113T140426Z-001/To_Willis-20220113T140426Z-001/To_Willis/Schnake_Data_Analysis")
